@@ -53,7 +53,7 @@ module HairTrigger
         options[:schema_rb_first] = true
         options[:skip_pending_migrations] = true
       end
-  
+
       # if we're in a db:schema:dump task (explict or kicked off by db:migrate),
       # we evaluate the previous schema.rb (if it exists), and then all applied
       # migrations in order (even ones older than schema.rb). this ensures we
@@ -70,7 +70,7 @@ module HairTrigger
         triggers = MigrationReader.get_triggers(migration, options)
         migrations << [migration, triggers] unless triggers.empty?
       end
-  
+
       if previous_schema = (options.has_key?(:previous_schema) ? options[:previous_schema] : File.exist?(schema_rb_path) && File.read(schema_rb_path))
         base_triggers = MigrationReader.get_triggers(previous_schema, options)
         unless base_triggers.empty?
@@ -78,9 +78,9 @@ module HairTrigger
           migrations.unshift [OpenStruct.new({:version => version}), base_triggers]
         end
       end
-      
+
       migrations = migrations.sort_by{|(migration, triggers)| migration.version} unless options[:schema_rb_first]
-  
+
       all_builders = []
       migrations.each do |(migration, triggers)|
         triggers.each do |new_trigger|
@@ -91,7 +91,7 @@ module HairTrigger
           all_builders << [migration.name, new_trigger] unless new_trigger.options[:drop]
         end
       end
-  
+
       all_builders
     end
 
@@ -102,27 +102,27 @@ module HairTrigger
     def generate_migration(silent = false)
       begin
         canonical_triggers = current_triggers
-      rescue 
+      rescue
         $stderr.puts $!
         exit 1
       end
-  
+
       migrations = current_migrations
       migration_names = migrations.map(&:first)
       existing_triggers = migrations.map(&:last)
-  
+
       up_drop_triggers = []
       up_create_triggers = []
       down_drop_triggers = []
       down_create_triggers = []
-  
+
       # see which triggers need to be dropped
       existing_triggers.each do |existing|
         next if canonical_triggers.any?{ |t| t.prepared_name == existing.prepared_name }
         up_drop_triggers.concat existing.drop_triggers
         down_create_triggers << existing
       end
-  
+
       # see which triggers need to be added/replaced
       (canonical_triggers - existing_triggers).each do |new_trigger|
         up_create_triggers << new_trigger
@@ -135,20 +135,22 @@ module HairTrigger
           down_create_triggers << existing
         end
       end
-  
+
       return if up_drop_triggers.empty? && up_create_triggers.empty?
 
       migration_name = infer_migration_name(migration_names, up_create_triggers, up_drop_triggers)
       migration_version = infer_migration_version(migration_name)
       file_name = migration_path + '/' + migration_version + "_" + migration_name.underscore + ".rb"
-      FileUtils.mkdir_p migration_path
       prefix = ActiveRecord::VERSION::STRING < "3.1." ? "self." : ""
+      ar_version = ActiveRecord::VERSION::STRING < "5.0." ? "" : "[#{ActiveRecord::VERSION::STRING[0..2]}]"
+
+      FileUtils.mkdir_p migration_path
       File.open(file_name, "w"){ |f| f.write <<-MIGRATION }
 # This migration was auto-generated via `rake db:generate_trigger_migration'.
 # While you can edit this file, any changes you make to the definitions here
 # will be undone by the next auto-generated trigger migration.
 
-class #{migration_name} < ActiveRecord::Migration
+class #{migration_name} < ActiveRecord::Migration#{ar_version}
   def #{prefix}up
     #{(up_drop_triggers + up_create_triggers).map{ |t| t.to_ruby('    ') }.join("\n\n").lstrip}
   end
